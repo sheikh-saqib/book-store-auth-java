@@ -9,6 +9,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -17,12 +19,14 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.bookstore.BookStore.models.AppUser;
+import com.bookstore.BookStore.models.LoginDTO;
 import com.bookstore.BookStore.models.RegisterDTO;
 import com.bookstore.BookStore.repositories.AppUserRepository;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
@@ -41,8 +45,10 @@ public class AccountController {
     private String jwtIssuer;
 
     @Autowired
-
     private AppUserRepository appUserRepository;
+
+    @Autowired
+    private AuthenticationManager authenticationManager;
 
     private String createJwtToken(AppUser appUser) {
 
@@ -130,4 +136,58 @@ public class AccountController {
         return ResponseEntity.badRequest().body("Error");
 
     }
+
+    @PostMapping("/login")
+    public ResponseEntity<Object> login(@Valid @RequestBody LoginDTO loginDTO, BindingResult result) {
+        // if any validation errors are encountered
+
+        if (result.hasErrors()) {
+            var errorsList = result.getAllErrors();
+            var errorsMap = new HashMap<String, String>();
+
+            for (int i = 0; i < errorsList.size(); i++) {
+                var error = (FieldError) errorsList.get(i);
+                errorsMap.put(error.getField(), error.getDefaultMessage());
+            }
+
+            return ResponseEntity.badRequest().body(errorsMap);
+        }
+
+        // check if valid creds
+        try {
+            // The authenticate method of the AuthenticationManager is called.
+            authenticationManager.authenticate(
+                    // A new UsernamePasswordAuthenticationToken is created with the provided
+                    // username and password.
+                    new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                            // The username is fetched from the loginDTO object.
+                            loginDTO.getUsername(),
+                            // The password is fetched from the loginDTO object.
+                            loginDTO.getPassword()));
+
+            AppUser appUser = appUserRepository.findByUsername(loginDTO.getUsername());
+
+            String jwtToken = createJwtToken(appUser);
+            var response = new HashMap<String, Object>();
+            response.put("token", jwtToken);
+            response.put("user", appUser);
+
+            return ResponseEntity.ok(response);
+        } catch (Exception ex) {
+            return ResponseEntity.badRequest().body("Invalid credentials");
+        }
+    }
+
+    @GetMapping("/profile")
+    public ResponseEntity<Object> profile(Authentication auth) {
+
+        var response = new HashMap<String, Object>();
+        response.put("Username", auth.getName());
+        response.put("Authorities", auth.getAuthorities());
+
+        var appUser = appUserRepository.findByUsername(auth.getName());
+        response.put("User", appUser);
+        return ResponseEntity.ok(response);
+    }
+
 }

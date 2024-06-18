@@ -34,8 +34,9 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/").permitAll()
-                        .requestMatchers("/store/**").permitAll()
                         .requestMatchers("/account/register").permitAll()
+                        .requestMatchers("/account/login").permitAll()
+                        .requestMatchers("/home").hasRole("client")
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
                 .sessionManagement(session -> session.sessionCreationPolicy(
